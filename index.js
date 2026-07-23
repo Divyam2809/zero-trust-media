@@ -1,0 +1,118 @@
+const express = require('express');
+const cors = require('cors');
+const cookieParser = require('cookie-parser');
+const dotenv = require('dotenv');
+const { getSignedUrl } = require('@aws-sdk/cloudfront-signer');
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:5175',
+    process.env.FRONTEND_URL // Allow custom frontend URL in production
+  ].filter(Boolean), // Remove undefined values
+  credentials: true,
+}));
+app.use(express.json());
+app.use(cookieParser());
+
+// Endpoint 1: POST /api/login
+// Simulates user login
+app.post('/api/login', (req, res) => {
+  // In a real application, you'd validate credentials here
+  // For POC, we just set a mock JWT or auth state in an httpOnly cookie
+  res.cookie('auth_token', 'mock_jwt_token_12345', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 3600000 // 1 hour
+  });
+  res.json({ message: 'Login successful' });
+});
+
+// Helper function to check auth
+const requireAuth = (req, res, next) => {
+  const token = req.cookies.auth_token;
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized: Please log in first' });
+  }
+  next();
+};
+
+// Endpoint 2: GET /api/media/authorize-stream
+app.get('/api/media/authorize-stream', requireAuth, (req, res) => {
+  const { videoId } = req.query;
+
+  if (!videoId) {
+    return res.status(400).json({ error: 'Missing videoId parameter' });
+  }
+
+  // Map videoId to actual CloudFront path
+  // In a real application, you'd fetch this from a database
+  const videoMap = {
+    'video123': 'Nested Sequence 01.mp4',
+    'video456': 'demo_video.mp4'
+  };
+
+  const assetPath = videoMap[videoId];
+
+  if (!assetPath) {
+    return res.status(404).json({ error: 'Video not found' });
+  }
+
+  const cloudfrontDomain = process.env.CLOUDFRONT_DOMAIN;
+  const keyPairId = process.env.CLOUDFRONT_KEY_PAIR_ID;
+  let privateKey = process.env.CLOUDFRONT_PRIVATE_KEY;
+
+  if (!cloudfrontDomain || !keyPairId || !privateKey) {
+    return res.status(500).json({ error: 'CloudFront configuration missing' });
+  }
+
+  // Handle newline characters in the environment variable
+  privateKey = privateKey.replace(/\\n/g, '\n');
+
+  // URL we want to grant access to
+  // encodeURI ensures spaces are converted to %20 correctly, which matches browser requests
+  const url = `${cloudfrontDomain}/${encodeURI(assetPath)}`;
+
+  // Set expiration time (e.g., valid for 5 minutes)
+  const expiry = new Date().getTime() + 5 * 60 * 1000; // 5 minutes in ms
+
+  try {
+    // Generate Signed URL instead of Signed Cookies for local POC testing
+    // This avoids cross-domain cookie blocking by the browser when running on localhost
+    const signedUrl = getSignedUrl({
+      url,
+      keyPairId,
+      privateKey,
+      dateLessThan: new Date(expiry).toISOString(),
+    });
+
+    res.json({ 
+      message: 'Stream authorized via Signed URL',
+      streamUrl: signedUrl,
+      expiresAt: new Date(expiry).toISOString()
+    });
+  } catch (error) {
+    console.error('Error generating signed URL:', error);
+    res.status(500).json({ error: 'Failed to generate stream authorization' });
+  }
+});
+
+// Add a logout route for completeness
+app.post('/api/logout', (req, res) => {
+  res.clearCookie('auth_token');
+  res.clearCookie('CloudFront-Policy');
+  res.clearCookie('CloudFront-Signature');
+  res.clearCookie('CloudFront-Key-Pair-Id');
+  res.json({ message: 'Logged out successfully' });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
