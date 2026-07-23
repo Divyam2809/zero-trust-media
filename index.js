@@ -55,7 +55,7 @@ app.get('/api/media/authorize-stream', requireAuth, (req, res) => {
   // Map videoId to actual CloudFront path
   // In a real application, you'd fetch this from a database
   const videoMap = {
-    'video123': 'Nested+Sequence+01.mp4',
+    'video123': 'Nested Sequence 01.mp4',
     'video456': 'demo_video.mp4'
   };
 
