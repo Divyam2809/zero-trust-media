@@ -76,9 +76,8 @@ app.get('/api/media/authorize-stream', requireAuth, (req, res) => {
   // Handle newline characters in the environment variable
   privateKey = privateKey.replace(/\\n/g, '\n');
 
-  // URL we want to grant access to
-  // encodeURI ensures spaces are converted to %20 correctly, which matches browser requests
-  const url = `${cloudfrontDomain}/${encodeURI(assetPath)}`;
+  // encodeURIComponent ensures characters like + and spaces are converted correctly for S3
+  const url = `${cloudfrontDomain}/${encodeURIComponent(assetPath)}`;
 
   // Set expiration time (e.g., valid for 5 minutes)
   const expiry = new Date().getTime() + 5 * 60 * 1000; // 5 minutes in ms
