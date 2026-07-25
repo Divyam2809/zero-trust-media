@@ -10,12 +10,10 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost:5175',
-    process.env.FRONTEND_URL // Allow custom frontend URL in production
-  ].filter(Boolean), // Remove undefined values
+  origin: (origin, callback) => {
+    // Allow any origin for custom game engine clients, or no origin for cURL/Postman
+    callback(null, origin || true);
+  },
   credentials: true,
 }));
 app.use(express.json());
@@ -26,21 +24,30 @@ app.use(cookieParser());
 app.post('/api/login', (req, res) => {
   // In a real application, you'd validate credentials here
   // For POC, we just set a mock JWT or auth state in an httpOnly cookie
-  res.cookie('auth_token', 'mock_jwt_token_12345', {
+  const token = 'mock_jwt_token_12345';
+  res.cookie('auth_token', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
     maxAge: 3600000 // 1 hour
   });
-  res.json({ message: 'Login successful' });
+  res.json({ message: 'Login successful', token });
 });
 
 // Helper function to check auth
 const requireAuth = (req, res, next) => {
-  const token = req.cookies.auth_token;
+  let token = req.cookies.auth_token;
+
+  // If missing from cookies, check Authorization header (for Unity / non-browser clients)
+  if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
   if (!token) {
     return res.status(401).json({ error: 'Unauthorized: Please log in first' });
   }
+
+  req.user = { token }; // Attach user context
   next();
 };
 
