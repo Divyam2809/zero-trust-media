@@ -63,7 +63,7 @@ app.get('/api/media/authorize-stream', requireAuth, (req, res) => {
   const videoMap = {
     'video123': 'Nested Sequence 01.mp4',
     'video456': 'demo/dummy_video.mp4',
-    'video789': '68_salt_march.mp4.enc'
+    'video789': '96_neptune.mp4.enc'
   };
 
   const assetPath = videoMap[videoId];
@@ -99,7 +99,7 @@ app.get('/api/media/authorize-stream', requireAuth, (req, res) => {
       dateLessThan: new Date(expiry).toISOString(),
     });
 
-    res.json({ 
+    res.json({
       message: 'Stream authorized via Signed URL',
       streamUrl: signedUrl,
       expiresAt: new Date(expiry).toISOString()
